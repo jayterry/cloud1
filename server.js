@@ -1,74 +1,87 @@
-const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors'); 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
 
-// === Render 健康檢查用 ===
+// 1. CORS 配置
+app.use(cors()); 
+
+// 解析 JSON 請求
+app.use(express.json());
+
+// **🌟 修正 1：(重要) 從 Render 的環境變數讀取 API Key**
+// 您必須在 Render 儀表板的 "Environment" 中設定此變數
+const API_KEY = process.env.API_KEY; 
+
+// 設置第三方 OpenAI 兼容 API 請求
+const customOpenAIApi = axios.create({
+  baseURL: 'https://free.v36.cm', // 使用您提供的 URL
+  headers: {
+    'Authorization': `Bearer ${API_KEY}`, 
+    'Content-Type': 'application/json',
+  }
+});
+
+// **🌟 修正 2：(重要) 新增 Render 健康檢查路由 (Health Check)**
 app.get("/", (req, res) => {
-  res.send("✅ Mood Gacha server is running.");
+  res.send("✅ Mood Gacha AI Server is running!");
 });
 
-// === 主要 API ===
-app.post("/generate-task", async (req, res) => {
-  try {
-    const { emotion, description } = req.body;
-    if (!emotion) return res.status(400).json({ error: "缺少 emotion 欄位" });
+// 路由：生成個性化任務與情緒加權
+app.post('/generate-task', async (req, res) => {
+  const { emotion, description } = req.body;
 
-    const prompt = `
-      根據下列使用者心情生成療癒任務：
-      心情：${emotion}
-      描述：${description || "（無描述）"}
-
-      請回覆 JSON：
-      {
-        "task": { "t": "任務名稱", "c": "分類", "d": "詳細說明" },
-        "w": 數字（情緒加權）
-      }
-    `;
-
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "伺服器未設定 API_KEY" });
-
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("❌ OpenAI 回傳錯誤：", data);
-      return res.status(500).json({ error: data.error?.message || "OpenAI 錯誤" });
-    }
-
-    let result;
-    try {
-      result = JSON.parse(data.choices[0].message.content);
-    } catch (e) {
-      console.error("⚠️ JSON 解析失敗：", e);
-      return res.status(500).json({ error: "AI 回傳格式錯誤" });
-    }
-
-    res.json(result);
-  } catch (err) {
-    console.error("伺服器錯誤：", err);
-    res.status(500).json({ error: "伺服器內部錯誤" });
+  // 檢查 API Key 是否已設定
+  if (!API_KEY) {
+    console.error("❌ 錯誤：API_KEY 未在 Render 環境變數中設定。");
+    return res.status(500).json({ error: "伺服器配置錯誤：未設定 API 金鑰。" });
   }
+
+  // 1. 定義系統提示詞 (使用您最新版本)
+  const systemPrompt = `你是一個溫暖、具啟發性的心理健康輔導助手。你的任務是根據用戶選擇的情緒和提供的額外描述，生成一個個性化的行動任務與鼓勵或安慰，以及一個介於 -10 到 10 之間的情緒加權數值。
+  - **🌟 創意要求 **：請盡量提供**多樣化且具體**的任務。**避免**重複生成常見的任務，例如「深呼吸練習」或「寫下感恩」（例如「分享快樂」），除非用戶的描述非常具體地指向它。
+  - **任務 (Task):**
+    - 任務標題 (t): 簡短、具體的任務名稱。
+    - 任務描述 (d): 執行任務的具體步驟或額外說明。
+    - 任務類別 (c): 任務的目標（如：放鬆、感恩、自我照顧、專注）。
+
+  - **情緒加權 (Weight):**
+    - 數值 (w): 介於 -10 到 10 之間的整數。
+      - 負數表示任務傾向於「改善」或「調節」情緒。
+      - 正數表示任務傾向於「放大」或「鼓勵」情緒。
+
+  請以純 JSON 格式回覆，不要包含任何額外文字。`;
+
+  // 2. 用戶提示詞 (User Prompt)
+  const userPrompt = `當前情緒為：「${emotion}」。用戶描述為：「${description || '無額外描述'}」。請生成任務與加權，格式必須為：{"task": {"t": "...", "d": "...", "c": "..."}, "w": ...}`;
+
+  try {
+    // 3. 調用 API
+    const response = await customOpenAIApi.post('/v1/chat/completions', {
+      model: "gpt-4o-mini", // (使用您指定的 gpt-4o-mini)
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      max_tokens: 500,
+      temperature: 0.7,
+      response_format: { type: "json_object" } 
+    });
+    
+    // 4. 解析 AI 回應
+    const aiContent = response.data.choices[0].message.content;
+    const result = JSON.parse(aiContent);
+    res.json(result); 
+
+  } catch (error) {
+    const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
+    console.error('第三方 API 錯誤:', errorMessage);
+    res.status(500).json({ error: '無法生成任務，請檢查 API 服務是否運行或接口路徑是否正確。' });
+  }
 });
 
-// === 啟動伺服器 ===
+// **🌟 修正 3：(重要) 使用 Render 提供的 PORT**
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Server running at http://localhost:${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
