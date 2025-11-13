@@ -1,56 +1,85 @@
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
+import express from "express";
+import cors from "cors";
+import bodyParser from "body-parser";
+import fetch from "node-fetch";
+
+// === 建立伺服器 ===
 const app = express();
-
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-// ✅ Render 自動提供 PORT（不可硬寫 3000）
-const port = process.env.PORT || 3000;
-
-// ✅ 用環境變數存放金鑰
-const API_KEY = process.env.API_KEY;
-
-// ✅ 設置第三方 API 請求
-const customOpenAIApi = axios.create({
-  baseURL: 'https://free.v36.cm',
-  headers: {
-    'Authorization': `Bearer ${API_KEY}`,
-    'Content-Type': 'application/json'
-  }
+// === 測試首頁（Render 用於健康檢查） ===
+app.get("/", (req, res) => {
+  res.send("✅ Mood Gacha server is running.");
 });
 
-// 🎯 路由：生成個性化任務與情緒加權
-app.post('/generate-task', async (req, res) => {
-  const { emotion, description } = req.body;
-
-  const systemPrompt = `你是一個溫暖、具啟發性的心理健康輔導助手。請根據用戶的情緒生成一個任務與情緒加權，格式為：
-  {"task": {"t": "...", "d": "...", "c": "..."}, "w": ...}`;
-
-  const userPrompt = `當前情緒：「${emotion}」，描述：「${description || '無額外描述'}」`;
-
+// === AI 任務生成 ===
+// 備註：Render 的環境變數設定中要有「API_KEY」欄位
+app.post("/generate-task", async (req, res) => {
   try {
-    const response = await customOpenAIApi.post('/v1/chat/completions', {
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      temperature: 0.7,
-      response_format: { type: "json_object" }
+    const { emotion, description } = req.body;
+
+    if (!emotion) {
+      return res.status(400).json({ error: "缺少 emotion 欄位" });
+    }
+
+    const prompt = `
+      根據下列使用者心情，生成一個「療癒任務」：
+      - 心情：${emotion}
+      - 描述：${description || "（無描述）"}
+
+      請用 JSON 格式回覆：
+      {
+        "task": { "t": "任務名稱", "c": "分類", "d": "詳細說明" },
+        "w": 數字（情緒加權）
+      }
+    `;
+
+    // === 呼叫 OpenAI API ===
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "伺服器未設定 API_KEY" });
+    }
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
 
-    const content = response.data.choices[0].message.content;
-    const result = JSON.parse(content);
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("❌ OpenAI 回傳錯誤：", data);
+      return res.status(500).json({ error: data.error?.message || "OpenAI 錯誤" });
+    }
+
+    // 嘗試解析回傳的 JSON
+    let result;
+    try {
+      result = JSON.parse(data.choices[0].message.content);
+    } catch (e) {
+      console.error("⚠️ JSON 解析失敗：", e);
+      return res.status(500).json({ error: "AI 回傳格式錯誤" });
+    }
+
+    // 正常回覆
     res.json(result);
 
-  } catch (error) {
-    console.error("第三方 API 錯誤:", error.response?.data || error.message);
-    res.status(500).json({ error: "AI 任務生成失敗，請稍後再試。" });
+  } catch (err) {
+    console.error("伺服器錯誤：", err);
+    res.status(500).json({ error: "伺服器內部錯誤" });
   }
 });
 
-app.listen(port, () => {
-  console.log(`✅ Server running on port ${port}`);
+// === Render 要求的 port ===
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ Server running at http://localhost:${PORT}`);
 });
