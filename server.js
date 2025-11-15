@@ -40,7 +40,7 @@ app.post('/generate-task', async (req, res) => {
   // 1. 定義系統提示詞 (使用您最新版本)
   const systemPrompt = `你是一個溫暖、具啟發性的心理健康輔導助手。  
 你的任務是根據用戶選擇的情緒與描述，生成：
-1️⃣ 一個個性化的行動任務（具體、有創意、有實際可行步驟）  
+1️⃣ 一個個性化的行動任務（具體、有創意、有實際可行步驟、簡單、能快速完成）  
 2️⃣ 一段真誠的鼓勵或安慰語  
 3️⃣ 一個介於 -10 到 10 的情緒加權數值  
 
@@ -95,4 +95,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
