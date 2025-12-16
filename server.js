@@ -63,7 +63,7 @@ app.post('/generate-task', async (req, res) => {
 
   try {
     const response = await customOpenAIApi.post('/v1/chat/completions', {
-      model: "gpt-4o-mini", 
+      model: "gpt-3.5-turbo", 
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
@@ -88,3 +88,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
