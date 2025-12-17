@@ -108,7 +108,7 @@ const DATA = {
     }
   },
 
-  "憂鬱": {
+  "焦慮": {
     "行為活化與行動": {
       activities: [
         "拍整理前後照片，只整理一小區",
@@ -303,7 +303,7 @@ function getStealthHint(emotion, theme, context) {
     return '使用者可能在上課或開會中，請避免任何明顯動作或需要離席的任務，改為更低調版本。';
   }
 
-  if (emotion === '憂鬱' || emotion === '開心' || emotion === '迷茫' || emotion === '平靜') {
+  if (emotion === '焦慮' || emotion === '開心' || emotion === '迷茫' || emotion === '平靜') {
     return '使用者可能在上課或開會中，請避免需要出聲通話、長時間書寫或拿出工具的任務，改為安靜、低干擾的版本。';
   }
 
@@ -429,3 +429,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
